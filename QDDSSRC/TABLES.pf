@@ -1,0 +1,231 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      CNTNRFIL
+     A* PURPOSE:   Container Fill Records
+     A*             Written by RFCNTSCAN each time an operator scans
+     A*             a container at the fill point. One row per fill event.
+     A*             If a container is partially filled then topped up,
+     A*             two rows exist — CFSEQNO distinguishes them.
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RCNTNRFIL
+     A            CFCNTNRID      20A         TEXT('Container ID (barcode)')
+     A            CFSEQNO         3S 0       TEXT('Fill Sequence (1=first fill)')
+     A            CFBORDNO       10A         TEXT('Blend Order Number')
+     A            CFLINENO        4A         TEXT('Fill Line Number')
+     A            CFITEMNO       18A         TEXT('Item Number')
+     A            CFLOTNO        16A         TEXT('Lot Number')
+     A            CFCONTTYP       6A         TEXT('Container Type: CAN BOT PCH CTN')
+     A            CFCONTSZE      10A         TEXT('Container Size e.g. 400G 1KG')
+     A            CFTARWT         7S 3       TEXT('Tare Weight KG')
+     A            CFGROSSWT       7S 3       TEXT('Gross Fill Weight KG')
+     A            CFNETWT         7S 3       TEXT('Net Fill Weight KG')
+     A            CFMINWT         7S 3       TEXT('Minimum Weight Spec KG')
+     A            CFMAXWT         7S 3       TEXT('Maximum Weight Spec KG')
+     A            CFWTSTAT        2A         TEXT('Weight Status: OK LO HI RE')
+     A*                                      OK=Pass LO=Underweight HI=Overweight
+     A*                                      RE=Recheck required
+     A            CFOPRID        10A         TEXT('Operator User ID')
+     A            CFSCANDT        8S 0       TEXT('Scan Date CCYYMMDD')
+     A            CFSCANTM        6S 0       TEXT('Scan Time HHMMSS')
+     A            CFDEVICID      10A         TEXT('RF Device / Scanner ID')
+     A            CFPRTSTAT       2A         TEXT('Label Print Status: NP PR ER')
+     A            CFPRTDT         8S 0       TEXT('Label Print Date')
+     A            CFPRTBY        10A         TEXT('Label Printed By')
+     A            CFSTATUS        2A         TEXT('Container Status: AC RJ SC SH')
+     A*                                      AC=Active RJ=Rejected SC=Scrapped
+     A*                                      SH=Shipped
+     A          K CFCNTNRID
+     A          K CFSEQNO
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      INGRISS
+     A* PURPOSE:   Ingredient Issue Log
+     A*             Every raw material issue to a blend order is recorded
+     A*             here. IISSEQNO increments per item per order.
+     A*             IIVARQTY = IIACTQTY - IITHQTY (negative = short issue)
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RINGRISS
+     A            IIBORDNO       10A         TEXT('Blend Order Number')
+     A            IIITEMNO       18A         TEXT('Ingredient Item Number')
+     A            IISSEQNO        3S 0       TEXT('Issue Sequence Number')
+     A            IILOTNO        16A         TEXT('Lot Number Issued')
+     A            IITHQTY         9S 3       TEXT('Theoretical Issue Qty')
+     A            IIACTQTY        9S 3       TEXT('Actual Issue Qty')
+     A            IIVARQTY        9S 3       TEXT('Variance Qty (Actual - Theoretical)')
+     A            IIVARPCT        5S 2       TEXT('Variance Percent')
+     A            IIUOM           3A         TEXT('Unit of Measure')
+     A            IISTORLOCN     10A         TEXT('Storage Location Issued From')
+     A            IIISSUEBY      10A         TEXT('Issued By User ID')
+     A            IIISSUEDT       8S 0       TEXT('Issue Date CCYYMMDD')
+     A            IIISSUETM       6S 0       TEXT('Issue Time HHMMSS')
+     A            IISTAT          2A         TEXT('Status: CM=Committed IS=Issued RV=Reversed')
+     A            IIRVRSBY       10A         TEXT('Reversed By (if reversed)')
+     A            IIRVRSDT        8S 0       TEXT('Reversal Date')
+     A            IIRVRSRSN      60A         TEXT('Reversal Reason')
+     A          K IIBORDNO
+     A          K IIITEMNO
+     A          K IISSEQNO
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      QLTHOLD
+     A* PURPOSE:   Quality Hold Master
+     A*             Placed by QA on a lot, blend order, or container.
+     A*             A hold blocks any further processing of the affected
+     A*             material. LOTAPPRV and BLNDVAL check this table before
+     A*             allowing continuation. Multiple holds can exist on
+     A*             the same lot (different QHSEQNO).
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RQLTHOLD
+     A            QHLOTNO        16A         TEXT('Lot Number')
+     A            QHITEMNO       18A         TEXT('Item Number')
+     A            QHSEQNO         3S 0       TEXT('Hold Sequence Number')
+     A            QHBORDNO       10A         TEXT('Blend Order (if applicable)')
+     A            QHCNTNRID      20A         TEXT('Container ID (if applicable)')
+     A            QHHOLDTYP       4A         TEXT('Hold Type: MICR CHEM PHYS DOCU PEST')
+     A*                                      MICR=Microbiological CHEM=Chemical
+     A*                                      PHYS=Physical     DOCU=Documentation
+     A*                                      PEST=Pesticide    FORE=Foreign Object
+     A            QHHOLDRSN      80A         TEXT('Hold Reason Description')
+     A            QHHOLDBY       10A         TEXT('Hold Placed By')
+     A            QHHOLDDT        8S 0       TEXT('Hold Date CCYYMMDD')
+     A            QHHOLDTM        6S 0       TEXT('Hold Time HHMMSS')
+     A            QHLABREQD       1A         TEXT('Lab Test Required Y/N')
+     A            QHLABREF       20A         TEXT('Lab Sample Reference Number')
+     A            QHLABRSLT       2A         TEXT('Lab Result: PA=Pass FA=Fail PE=Pending')
+     A            QHLABDT         8S 0       TEXT('Lab Result Date')
+     A            QHSTATUS        2A         TEXT('Hold Status: AC=Active RL=Released')
+     A*                                      DS=Destroyed EX=Expired (auto-released)
+     A            QHRELBY        10A         TEXT('Released By')
+     A            QHRELDT         8S 0       TEXT('Release Date')
+     A            QHRELTM         6S 0       TEXT('Release Time')
+     A            QHRELRSN       80A         TEXT('Release Reason / Disposition')
+     A            QHESCBY        10A         TEXT('Escalated To (if escalated)')
+     A            QHESCDT         8S 0       TEXT('Escalation Date')
+     A          K QHLOTNO
+     A          K QHSEQNO
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      YLDVARNC
+     A* PURPOSE:   Yield Variance
+     A*             Written by YLDRECNC at end of blend. One row per
+     A*             blend order. YVVARPCT outside YVMAXVAR triggers
+     A*             an automatic QA hold via QHOLDPRC.
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RYLDVARNC
+     A            YVBORDNO       10A         TEXT('Blend Order Number')
+     A            YVFORMCD       10A         TEXT('Formula Code')
+     A            YVITEMNO       18A         TEXT('Finished Good Item Number')
+     A            YVTHQTY         9S 3       TEXT('Theoretical Yield KG')
+     A            YVACTQTY        9S 3       TEXT('Actual Yield KG')
+     A            YVREJQTY        9S 3       TEXT('Rejected Qty KG')
+     A            YVSCPQTY        9S 3       TEXT('Scrap Qty KG')
+     A            YVVARQTY        9S 3       TEXT('Variance Qty (Act - Th)')
+     A            YVVARPCT        6S 3       TEXT('Variance Percent')
+     A            YVMAXVAR        5S 2       TEXT('Maximum Allowed Variance Pct')
+     A            YVVARSTAT       2A         TEXT('Variance Status: OK EX=Exceeded')
+     A            YVQAHOLD        1A         TEXT('QA Hold Auto-Placed Y/N')
+     A            YVQAHOLDID     10A         TEXT('QA Hold ID if placed')
+     A            YVRECNBY       10A         TEXT('Reconciled By')
+     A            YVRECNDT        8S 0       TEXT('Reconciliation Date')
+     A            YVRECNTM        6S 0       TEXT('Reconciliation Time')
+     A            YVAPRVBY       10A         TEXT('Variance Approved By')
+     A            YVAPRVDT        8S 0       TEXT('Variance Approval Date')
+     A            YVNOTES        80A         TEXT('Reconciliation Notes')
+     A          K YVBORDNO
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      LINESHFT
+     A* PURPOSE:   Line/Shift Log
+     A*             One row per line per shift. Tracks current blend order,
+     A*             operator assignments, downtime events and CIP status.
+     A*             LINESTAT is read by FILLINIT to confirm the line is
+     A*             clean and ready before a new blend order can start.
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RLINESHFT
+     A            LSLINENO        4A         TEXT('Manufacturing Line Number')
+     A            LSSHIFTNO       1A         TEXT('Shift Number 1 2 3')
+     A            LSSHIFTDT       8S 0       TEXT('Shift Date CCYYMMDD')
+     A            LSBORDNO       10A         TEXT('Current Blend Order')
+     A            LSOPRID        10A         TEXT('Shift Operator User ID')
+     A            LSSUPVID       10A         TEXT('Supervisor User ID')
+     A            LSSTRTDT        8S 0       TEXT('Shift Start Date')
+     A            LSSTRTTM        6S 0       TEXT('Shift Start Time')
+     A            LSENDDT         8S 0       TEXT('Shift End Date')
+     A            LSENDTM         6S 0       TEXT('Shift End Time')
+     A            LSSTATUS        4A         TEXT('Line Status: IDLE RUN DOWN CIP SANIT')
+     A*                                      IDLE=Idle  RUN=Running
+     A*                                      DOWN=Downtime CIP=Cleaning in Progress
+     A*                                      SANIT=Sanitation MAINT=Maintenance
+     A            LSCIPDT         8S 0       TEXT('Last CIP Date')
+     A            LSCIPTM         6S 0       TEXT('Last CIP Time')
+     A            LSCIPBY        10A         TEXT('CIP Performed By')
+     A            LSCIPSTAT       2A         TEXT('CIP Status: OK DU=Due OV=Overdue')
+     A            LSTOTFILL       7S 0       TEXT('Total Containers Filled This Shift')
+     A            LSTOTREJ        5S 0       TEXT('Total Rejected Containers')
+     A            LSTOTDNT        5S 0       TEXT('Total Downtime Minutes')
+     A            LSNOTES        80A         TEXT('Shift Notes')
+     A          K LSLINENO
+     A          K LSSHIFTNO
+     A          K LSSHIFTDT
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      RMATMAS
+     A* PURPOSE:   Raw Material Master
+     A*             Specification limits for incoming raw materials.
+     A*             BLNDVAL uses RMMINQTY/RMMAXQTY to validate that
+     A*             each ingredient issue is within spec before the
+     A*             blend order can be released for processing.
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RRMATMAS
+     A            RMITEMNO       18A         TEXT('Item Number')
+     A            RMITEMDSC      40A         TEXT('Item Description')
+     A            RMITMTYPE       4A         TEXT('Item Type: PROT CARB FAT VIT MIN')
+     A*                                      PROT=Protein CARB=Carbohydrate
+     A*                                      FAT=Fat  VIT=Vitamin MIN=Mineral
+     A*                                      FLAV=Flavour EMUL=Emulsifier
+     A*                                      PRSV=Preservative BULK=Bulking Agent
+     A            RMUOM           3A         TEXT('Unit of Measure')
+     A            RMSUPPLIER     10A         TEXT('Primary Supplier Code')
+     A            RMMINQTY        9S 3       TEXT('Minimum Issue Qty (batch min)')
+     A            RMMAXQTY        9S 3       TEXT('Maximum Issue Qty (batch max)')
+     A            RMMINVAR        5S 2       TEXT('Minimum Acceptable Variance Pct')
+     A            RMMAXVAR        5S 2       TEXT('Maximum Acceptable Variance Pct')
+     A            RMSHLFLIFE      5S 0       TEXT('Shelf Life Days')
+     A            RMRETESTDY      5S 0       TEXT('Retest Interval Days')
+     A            RMSTORTEMP      5S 1       TEXT('Required Storage Temp C')
+     A            RMSTORHUMD      5S 1       TEXT('Required Humidity Pct')
+     A            RMSTORLOCN     10A         TEXT('Default Storage Location')
+     A            RMCOFA          1A         TEXT('Certificate of Analysis Required Y/N')
+     A            RMCOFATYP       4A         TEXT('CoA Type: MICR CHEM FULL')
+     A            RMALLERGY      20A         TEXT('Allergen Codes e.g. MILK SOY WHEAT')
+     A            RMHAZMAT        1A         TEXT('Hazardous Material Y/N')
+     A            RMACTIVE        1A         TEXT('Active Y/N')
+     A            RMCRTBY        10A         TEXT('Created By')
+     A            RMCRTDT         8S 0       TEXT('Created Date')
+     A            RMCHGBY        10A         TEXT('Last Changed By')
+     A            RMCHGDT         8S 0       TEXT('Last Changed Date')
+     A          K RMITEMNO
+
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      LBLLOG
+     A* PURPOSE:   Label Print Log
+     A*             Written by LBLPRINT each time a label is printed.
+     A*             Reprints are tracked with LLREPFLG = 'Y' and
+     A*             LLREPRSN populated. Regulatory audit requirement.
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RLBLLOG
+     A            LLLOGID        18A         TEXT('Log ID (timestamp + seq)')
+     A            LLCNTNRID      20A         TEXT('Container ID')
+     A            LLBORDNO       10A         TEXT('Blend Order Number')
+     A            LLLOTNO        16A         TEXT('Lot Number')
+     A            LLITEMNO       18A         TEXT('Item Number')
+     A            LLLBLTYP        6A         TEXT('Label Type: PROD SHIP HZRD HOLD')
+     A            LLLBLVER        3A         TEXT('Label Version')
+     A            LLPRTRID       10A         TEXT('Printer ID')
+     A            LLPRTBY        10A         TEXT('Printed By User ID')
+     A            LLPRTDT         8S 0       TEXT('Print Date CCYYMMDD')
+     A            LLPRTTM         6S 0       TEXT('Print Time HHMMSS')
+     A            LLPRTSTAT       2A         TEXT('Print Status: OK ER=Error CA=Cancelled')
+     A            LLREPFLG        1A         TEXT('Reprint Flag Y/N')
+     A            LLREPRSN       60A         TEXT('Reprint Reason')
+     A            LLREPAUTH      10A         TEXT('Reprint Authorised By')
+     A          K LLLOGID

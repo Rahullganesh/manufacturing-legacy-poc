@@ -1,0 +1,69 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      LOTMSTR
+     A* SYSTEM:    APEX Nutritional Manufacturing — IBM i
+     A* PURPOSE:   Lot Master — central lot tracking table
+     A*             Every raw material receipt, blend lot, and finished
+     A*             good lot has exactly one row here. QA status on this
+     A*             table is the single source of truth for lot disposition.
+     A*             FDA 21 CFR Part 11 audit trail is maintained via
+     A*             LOTAUDIT (written by trigger LOTMSTR_TRG).
+     A* KEYS:      LOTNO + LOTITEM (unique)
+     A* RELATED:   INGRISS, CNTNRFIL, QLTHOLD, BLNDORDR
+     A* CREATED:   2023-08-01   J.MARTINEZ
+     A* MODIFIED:  2025-11-14   S.PATEL  — Added LREGION, LCOUNTRY
+     A*             2026-05-03   R.CHEN   — Added LRETEST fields
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RLOTMSTR
+     A*
+     A* -- Lot Identification --
+     A            LOTNO          16A         TEXT('Lot Number')
+     A            LOTITEM        18A         TEXT('Item Number')
+     A            LITEMDSC       40A         TEXT('Item Description')
+     A            LITMTYPE        2A         TEXT('Item Type: RM=Raw Mat FG=Fin Gd')
+     A*                                      BL=Bulk IN=Intermediate PK=Packaging
+     A            LSUPPLIER      10A         TEXT('Supplier Code')
+     A            LSUPPLNO       20A         TEXT('Supplier Lot Number')
+     A*
+     A* -- Quantities --
+     A            LQTYRCVD        9S 3       TEXT('Quantity Received')
+     A            LQTYAVAIL       9S 3       TEXT('Quantity Available')
+     A            LQTYHOLD        9S 3       TEXT('Quantity On Hold')
+     A            LQTYUSED        9S 3       TEXT('Quantity Used / Issued')
+     A            LQTYDEST        9S 3       TEXT('Quantity Destroyed')
+     A            LUOM            3A         TEXT('Unit of Measure')
+     A*
+     A* -- Status --
+     A            LQASTAT         2A         TEXT('QA Status')
+     A*                                      AP=Approved  PE=Pending
+     A*                                      HO=Hold      RJ=Rejected
+     A*                                      QU=Quarantine EX=Expired
+     A*                                      RE=Retest    RC=Recalled
+     A            LHOLDRSN       60A         TEXT('Hold Reason Description')
+     A*
+     A* -- Dates --
+     A            LMFGDT          8S 0       TEXT('Manufacture Date CCYYMMDD')
+     A            LEXPDT          8S 0       TEXT('Expiry Date CCYYMMDD')
+     A            LRCVDT          8S 0       TEXT('Received Date CCYYMMDD')
+     A            LSAMPLDT        8S 0       TEXT('Sample Date CCYYMMDD')
+     A            LRETESTDT       8S 0       TEXT('Retest Date CCYYMMDD')
+     A            LRETESTBY      10A         TEXT('Retest Requested By')
+     A*
+     A* -- Origin --
+     A            LSUPSITE       10A         TEXT('Supplier Site Code')
+     A            LREGION         3A         TEXT('Region Code: NAM EUR APAC')
+     A            LCOUNTRY        3A         TEXT('Country of Origin ISO3')
+     A*
+     A* -- Storage --
+     A            LSTORLOCN      10A         TEXT('Primary Storage Location')
+     A            LSTORTEMP       5S 1       TEXT('Required Storage Temp C')
+     A            LSTORHUMD       5S 1       TEXT('Required Humidity Pct')
+     A*
+     A* -- Audit --
+     A            LCRTBY         10A         TEXT('Created By')
+     A            LCRTDT          8S 0       TEXT('Created Date CCYYMMDD')
+     A            LCHGBY         10A         TEXT('Last Changed By')
+     A            LCHGDT          8S 0       TEXT('Last Changed Date')
+     A            LCHGTM          6S 0       TEXT('Last Changed Time')
+     A*
+     A          K LOTNO
+     A          K LOTITEM

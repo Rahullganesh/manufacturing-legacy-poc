@@ -1,0 +1,70 @@
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A* FILE:      BLNDORDR
+     A* SYSTEM:    APEX Nutritional Manufacturing — IBM i
+     A* PURPOSE:   Blend Order Master
+     A*             One row per blend/batch order. Drives the entire
+     A*             manufacturing execution sequence from raw material
+     A*             issue through yield reconciliation and batch close.
+     A* KEYS:      BORDNO (unique)
+     A* RELATED:   INGRISS (FK BORDNO), YLDVARNC (FK BORDNO),
+     A*             LINESHFT (FK BORDNO), CNTNRFIL (FK BORDNO)
+     A* CREATED:   2024-01-15   J.MARTINEZ
+     A* MODIFIED:  2026-03-10   S.PATEL  — Added BSCHEDDT, BPRIORITY
+     A*             2026-07-22   R.CHEN   — Added BQARELDT, BQARELBY
+     A*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+     A          R RBLNDORDR
+     A*
+     A* -- Blend Order Identification --
+     A            BORDNO         10A         TEXT('Blend Order Number')
+     A            BFORMCD        10A         TEXT('Formula Code')
+     A            BFORMVER        3S 0       TEXT('Formula Version Number')
+     A            BITEMNO        18A         TEXT('Finished Good Item Number')
+     A            BITEMDSC       40A         TEXT('Item Description')
+     A*
+     A* -- Quantities --
+     A            BTHQTY          9S 3       TEXT('Theoretical Batch Size KG')
+     A            BACTQTY         9S 3       TEXT('Actual Yield KG')
+     A            BREJQTY         9S 3       TEXT('Rejected Qty KG')
+     A            BSCRAPQTY       9S 3       TEXT('Scrap Qty KG')
+     A            BUOMCOD         3A         TEXT('Unit of Measure KG/LB/G')
+     A*
+     A* -- Status and Control --
+     A            BSTATUS         2A         TEXT('Status: CR NR BL YR QA RL CL')
+     A*                                      CR=Created   NR=Not Released
+     A*                                      BL=Blending  YR=Yield Recon
+     A*                                      QA=QA Review RL=Released
+     A*                                      CL=Closed    VO=Voided
+     A            BPRIORITY       1A         TEXT('Priority: 1=High 2=Norm 3=Low')
+     A            BLINENO         4A         TEXT('Manufacturing Line Number')
+     A            BSHIFTNO        1A         TEXT('Shift: 1 2 3')
+     A*
+     A* -- Dates and Times --
+     A            BSCHEDDT        8S 0       TEXT('Scheduled Production Date CCYYMMDD')
+     A            BSCHEDTM        6S 0       TEXT('Scheduled Start Time HHMMSS')
+     A            BSTARTDT        8S 0       TEXT('Actual Start Date CCYYMMDD')
+     A            BSTARTTM        6S 0       TEXT('Actual Start Time HHMMSS')
+     A            BENDDT          8S 0       TEXT('Actual End Date CCYYMMDD')
+     A            BENDTM          6S 0       TEXT('Actual End Time HHMMSS')
+     A            BCLOSEDT        8S 0       TEXT('Batch Close Date CCYYMMDD')
+     A*
+     A* -- Lot Assignment --
+     A            BFINLOT        16A         TEXT('Finished Good Lot Number')
+     A            BBULKLOT       16A         TEXT('Bulk Blend Lot Number')
+     A*
+     A* -- QA Release --
+     A            BQASTAT         2A         TEXT('QA Status: PE AP RJ HO')
+     A*                                      PE=Pending AP=Approved
+     A*                                      RJ=Rejected HO=Hold
+     A            BQARELDT        8S 0       TEXT('QA Release Date CCYYMMDD')
+     A            BQARELBY       10A         TEXT('QA Released By User ID')
+     A            BQANOTES       80A         TEXT('QA Notes')
+     A*
+     A* -- Audit --
+     A            BCRTBY         10A         TEXT('Created By User ID')
+     A            BCRTDT          8S 0       TEXT('Created Date CCYYMMDD')
+     A            BCRTTM          6S 0       TEXT('Created Time HHMMSS')
+     A            BCHGBY         10A         TEXT('Last Changed By')
+     A            BCHGDT          8S 0       TEXT('Last Changed Date')
+     A            BCHGTM          6S 0       TEXT('Last Changed Time')
+     A*
+     A          K BORDNO

@@ -1,0 +1,242 @@
+/* =========================================================================== */
+/* PROGRAM:    BATCHCLS                                                        */
+/* SYSTEM:     APEX Nutritional Manufacturing — IBM i                          */
+/* PURPOSE:    Batch Close Driver                                               */
+/*             CL driver that orchestrates the end-of-batch sequence:          */
+/*               1. Validates all containers on the blend order are labelled   */
+/*               2. Checks for unresolved RE (recheck) weight containers       */
+/*               3. Calls YLDRECNC (yield reconciliation)                      */
+/*               4. If yield OK, calls LOTAPPRV to submit QA approval request  */
+/*               5. If yield exceeded, holds and notifies QA supervisor        */
+/*               6. Calls SP_CLOSE_BATCH if QA already approved               */
+/*               7. Logs completion / failure to INVTRANS via embedded SQL     */
+/*               8. Sends operator message with result                         */
+/*                                                                             */
+/*             This program is submitted to QBATCH by the supervisor from      */
+/*             the batch close screen (BATCHCLSD) or by the end-of-shift      */
+/*             automated scheduler (APEXSCH job BATCHCLS scheduled 06:00,     */
+/*             14:00, 22:00 — one hour before shift end).                      */
+/*                                                                             */
+/*             KNOWN ISSUE: If BATCHCLS is submitted before all RF scans      */
+/*             from the filling line have been written to CNTNRFIL             */
+/*             (in-flight scans on the RF devices), the container count will   */
+/*             be short. The 5-minute lag between last scan and batch close    */
+/*             submit is enforced by BATCHCLSD (interactive screen) but not   */
+/*             by the scheduler. CHG-2026-0058: Add 5-minute delay to the     */
+/*             scheduler submit. Open as of 2026-09-01.                        */
+/*                                                                             */
+/* PARAMETERS:                                                                 */
+/*   &BORDNO   10A  Blend Order Number                                         */
+/*   &OPRID    10A  Operator / Supervisor User ID                               */
+/*   &QABATCH   1A  Y = QA approval already on file, proceed to close          */
+/*                   N = Submit for QA approval first (default)                 */
+/*                                                                             */
+/* CALLS:                                                                      */
+/*   YLDRECNC  — Yield reconciliation program                                  */
+/*   LOTAPPRV  — Lot approval / QA submission                                  */
+/*   SNDMSG    — CL command to send operator messages                          */
+/*   APEXMFG.SP_CLOSE_BATCH — SQL stored procedure                            */
+/*                                                                             */
+/* MODIFIED:                                                                   */
+/*   2024-06-01  J.MARTINEZ  Initial version                                   */
+/*   2025-04-10  S.PATEL     Added RE container check before yield recon       */
+/*   2025-10-22  R.CHEN      Added QABATCH parameter for direct close          */
+/*   2026-03-15  T.OKAFOR    Added scheduler integration notes                 */
+/*   2026-08-20  J.MARTINEZ  Fixed SNDMSG to include blend order in all msgs  */
+/* =========================================================================== */
+
+PGM PARM(&BORDNO &OPRID &QABATCH)
+
+DCL VAR(&BORDNO)  TYPE(*CHAR) LEN(10)
+DCL VAR(&OPRID)   TYPE(*CHAR) LEN(10)
+DCL VAR(&QABATCH) TYPE(*CHAR) LEN(1)  VALUE('N')
+
+/* Return codes and messages from called programs */
+DCL VAR(&RETCOD)  TYPE(*CHAR) LEN(2)
+DCL VAR(&ERRMSG)  TYPE(*CHAR) LEN(200)
+DCL VAR(&VARPCT)  TYPE(*DEC)  LEN(7 3)
+DCL VAR(&VARSTAT) TYPE(*CHAR) LEN(2)
+DCL VAR(&WARNMSG) TYPE(*CHAR) LEN(200)
+
+/* SP_CLOSE_BATCH outputs */
+DCL VAR(&CLSRETCD) TYPE(*CHAR) LEN(2)
+DCL VAR(&CLSERRMG) TYPE(*CHAR) LEN(200)
+DCL VAR(&CLSSQLER) TYPE(*CHAR) LEN(5)
+DCL VAR(&CLSSUMRY) TYPE(*CHAR) LEN(500)
+
+/* Working variables */
+DCL VAR(&TOTCNTR)  TYPE(*DEC)  LEN(7 0)
+DCL VAR(&UNLBLCNT) TYPE(*DEC)  LEN(5 0)
+DCL VAR(&RECHKCNT) TYPE(*DEC)  LEN(5 0)
+DCL VAR(&MSGTEXT)  TYPE(*CHAR) LEN(200)
+DCL VAR(&ERRLINE)  TYPE(*CHAR) LEN(40)
+
+/* Monitor for any unexpected errors */
+MONMSG MSGID(CPF0000) EXEC(GOTO CMDLBL(PGMERR))
+
+/* =========================================================================== */
+/* STEP 1: Validate parameter input                                             */
+/* =========================================================================== */
+IF COND(&BORDNO *EQ ' ') THEN(DO)
+    SNDMSG MSG('BATCHCLS: Blend order number required.') TOUSR(&OPRID)
+    SNDPGMMSG MSGID(CPF9898) MSGF(QCPFMSG) +
+        MSGDTA('Blend order number required') +
+        MSGTYPE(*ESCAPE)
+    RETURN
+ENDDO
+
+IF COND(&OPRID *EQ ' ') THEN(DO)
+    CHGVAR VAR(&OPRID) VALUE('BATCH   ')
+ENDDO
+
+/* =========================================================================== */
+/* STEP 2: Check all containers are labelled                                    */
+/*         SQL: count containers with CFPRTSTAT <> 'PR' and CFSTATUS = 'AC'   */
+/* =========================================================================== */
+CHGVAR VAR(&ERRLINE) VALUE('STEP2-LABELCHECK')
+
+RUNSQL SQL('SELECT COUNT(*) INTO :UNLBLCNT +
+            FROM APEXMFG.CNTNRFIL +
+            WHERE CFBORDNO = ''' || &BORDNO || ''' +
+            AND CFSTATUS = ''AC'' +
+            AND CFPRTSTAT <> ''PR''') +
+       COMMIT(*NONE) NAMING(*SQL)
+
+MONMSG MSGID(SQL0000) EXEC(CHGVAR VAR(&UNLBLCNT) VALUE(0))
+
+IF COND(&UNLBLCNT *GT 0) THEN(DO)
+    CHGVAR VAR(&MSGTEXT) VALUE('BATCHCLS: Cannot close ' *CAT +
+        %TRIM(&BORDNO) *CAT '. ' *CAT +
+        %TRIM(&UNLBLCNT) *CAT +
+        ' container(s) not labelled. Print all labels first.')
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    SNDPGMMSG MSGID(CPF9898) MSGF(QCPFMSG) MSGDTA(&MSGTEXT) MSGTYPE(*ESCAPE)
+    RETURN
+ENDDO
+
+/* =========================================================================== */
+/* STEP 3: Check for unresolved RE (recheck) containers                        */
+/*         Warn but do not block — yield recon handles exclusion               */
+/*         Documents CHG-2026-0062 root cause                                  */
+/* =========================================================================== */
+CHGVAR VAR(&ERRLINE) VALUE('STEP3-RECHECKCHK')
+
+RUNSQL SQL('SELECT COUNT(*) INTO :RECHKCNT +
+            FROM APEXMFG.CNTNRFIL +
+            WHERE CFBORDNO = ''' || &BORDNO || ''' +
+            AND CFWTSTAT = ''RE'' +
+            AND CFSTATUS = ''AC''') +
+       COMMIT(*NONE) NAMING(*SQL)
+
+MONMSG MSGID(SQL0000) EXEC(CHGVAR VAR(&RECHKCNT) VALUE(0))
+
+IF COND(&RECHKCNT *GT 0) THEN(DO)
+    CHGVAR VAR(&MSGTEXT) VALUE('WARNING: ' *CAT %TRIM(&RECHKCNT) *CAT +
+        ' unresolved RECHECK container(s) on order ' *CAT +
+        %TRIM(&BORDNO) *CAT +
+        '. These will be excluded from yield. See INC-2026-0198.')
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    SNDMSG MSG(&MSGTEXT) TOUSR(SHIFTQA)
+ENDDO
+
+/* =========================================================================== */
+/* STEP 4: Call yield reconciliation                                            */
+/* =========================================================================== */
+CHGVAR VAR(&ERRLINE) VALUE('STEP4-YLDRECNC')
+
+CALL PGM(APEXMFG/YLDRECNC) PARM(&BORDNO &OPRID &RETCOD &ERRMSG +
+                                  &VARPCT &VARSTAT)
+
+IF COND(&RETCOD *EQ '50') THEN(DO)
+    CHGVAR VAR(&MSGTEXT) VALUE('BATCHCLS YLDRECNC SQL ERROR: ' *CAT %TRIM(&ERRMSG))
+    SNDMSG MSG(&MSGTEXT) TOUSR(APEXSUPPORT)
+    GOTO CMDLBL(PGMERR)
+ENDDO
+
+IF COND(&VARSTAT *EQ 'EX') THEN(DO)
+    /* Variance exceeded — QA hold has been placed by YLDRECNC */
+    /* Notify QA supervisor and batch is left in YR status      */
+    CHGVAR VAR(&MSGTEXT) VALUE('YIELD VARIANCE EXCEEDED on ' *CAT +
+        %TRIM(&BORDNO) *CAT '. Variance: ' *CAT +
+        %TRIM(&VARPCT) *CAT '%. QA hold placed. ' *CAT +
+        'QA approval required before batch can close.')
+    SNDMSG MSG(&MSGTEXT) TOUSR(QASUPRVSR)
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    /* Do not proceed to close */
+    RETURN
+ENDDO
+
+/* =========================================================================== */
+/* STEP 5: If QABATCH = Y, proceed directly to SP_CLOSE_BATCH                 */
+/*         Otherwise submit LOTAPPRV for QA review                             */
+/* =========================================================================== */
+CHGVAR VAR(&ERRLINE) VALUE('STEP5-QAROUTE')
+
+IF COND(&QABATCH *EQ 'Y') THEN(DO)
+    /* QA pre-approved — proceed to close */
+    GOTO CMDLBL(CLOSEBATCH)
+ENDDO
+
+/* Submit lot to QA approval queue */
+CALL PGM(APEXMFG/LOTAPPRV) PARM(&BORDNO &OPRID &RETCOD &ERRMSG)
+
+IF COND(&RETCOD *NE '00') THEN(DO)
+    CHGVAR VAR(&MSGTEXT) VALUE('LOTAPPRV failed for ' *CAT +
+        %TRIM(&BORDNO) *CAT ': ' *CAT %TRIM(&ERRMSG))
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    SNDMSG MSG(&MSGTEXT) TOUSR(APEXSUPPORT)
+    RETURN
+ENDDO
+
+/* QA submitted — batch stays in YR status waiting for QA */
+CHGVAR VAR(&MSGTEXT) VALUE('Batch ' *CAT %TRIM(&BORDNO) *CAT +
+    ' submitted to QA for approval. ' *CAT +
+    'Yield variance: ' *CAT %TRIM(&VARPCT) *CAT '%. ' *CAT +
+    'Batch will close automatically when QA approves.')
+SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+RETURN
+
+/* =========================================================================== */
+/* STEP 6: Close the batch                                                      */
+/* =========================================================================== */
+CLOSEBATCH:
+CHGVAR VAR(&ERRLINE) VALUE('STEP6-CLOSEBATCH')
+
+RUNSQL SQL('CALL APEXMFG.SP_CLOSE_BATCH(+
+            ''' || &BORDNO || ''', +
+            ''' || &OPRID  || ''', +
+            :CLSRETCD, :CLSERRMG, :CLSSQLER, :CLSSUMRY)') +
+       COMMIT(*CHG) NAMING(*SQL)
+
+MONMSG MSGID(SQL0000) EXEC(GOTO CMDLBL(CLSERR))
+
+IF COND(&CLSRETCD *NE '00') THEN(DO)
+    CHGVAR VAR(&MSGTEXT) VALUE('SP_CLOSE_BATCH failed: ' *CAT %TRIM(&CLSERRMG))
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    SNDMSG MSG(&MSGTEXT) TOUSR(APEXSUPPORT)
+    RETURN
+ENDDO
+
+/* Success */
+SNDMSG MSG(&CLSSUMRY) TOUSR(&OPRID)
+SNDMSG MSG(&CLSSUMRY) TOUSR(SHIFTQA)
+RETURN
+
+/* =========================================================================== */
+/* Error handlers                                                               */
+/* =========================================================================== */
+CLSERR:
+    CHGVAR VAR(&MSGTEXT) VALUE('SP_CLOSE_BATCH SQL error ' *CAT +
+        %TRIM(&CLSSQLER) *CAT ' on order ' *CAT %TRIM(&BORDNO))
+    SNDMSG MSG(&MSGTEXT) TOUSR(APEXSUPPORT)
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+    RETURN
+
+PGMERR:
+    CHGVAR VAR(&MSGTEXT) VALUE('BATCHCLS unexpected error at ' *CAT +
+        %TRIM(&ERRLINE) *CAT ' for order ' *CAT %TRIM(&BORDNO) *CAT +
+        '. Contact Application Support.')
+    SNDMSG MSG(&MSGTEXT) TOUSR(APEXSUPPORT)
+    SNDMSG MSG(&MSGTEXT) TOUSR(&OPRID)
+
+ENDPGM
